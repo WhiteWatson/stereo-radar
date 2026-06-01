@@ -4,8 +4,10 @@
 //! 阶段 1 仅提供 [`SyntheticCapture`]；`FileCapture`(读 WAV) / `CpalCapture`
 //! 作为同接口的兄弟实现后续补入。
 
+mod cpal_capture;
 mod synthetic;
 
+pub use cpal_capture::CpalCapture;
 pub use synthetic::SyntheticCapture;
 
 use crate::model::AudioFrame;

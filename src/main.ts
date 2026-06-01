@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { Radar, ChannelBars, type SourcePoint } from "./radar";
 import { ControlPanel } from "./panel";
+import { DeviceSelector } from "./device";
 
 interface FramePayload {
   ts: number;
@@ -12,9 +13,13 @@ const canvas = document.getElementById("radar") as HTMLCanvasElement;
 const barsEl = document.getElementById("bars") as HTMLElement;
 const panelEl = document.getElementById("panel") as HTMLElement;
 
+const deviceSel = document.getElementById("device") as HTMLSelectElement;
+const deviceCh = document.getElementById("device-ch") as HTMLElement;
+
 const radar = new Radar(canvas);
 const bars = new ChannelBars(barsEl);
 new ControlPanel(panelEl);
+new DeviceSelector(deviceSel, deviceCh);
 
 // 后端推送与渲染解耦：事件只更新最新帧，rAF 负责绘制（带背压，丢旧帧）。
 let latest: FramePayload | null = null;
