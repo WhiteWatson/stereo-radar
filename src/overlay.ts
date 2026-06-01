@@ -2,6 +2,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { register } from "@tauri-apps/plugin-global-shortcut";
+import { getSettings, updateSettings } from "./settings";
 
 const win = getCurrentWindow();
 
@@ -17,10 +18,16 @@ export class Overlay {
     opacity: HTMLInputElement,
     private appEl: HTMLElement,
   ) {
+    // 恢复保存的透明度。
+    const savedOpacity = getSettings().opacity;
+    opacity.value = String(savedOpacity);
+    this.appEl.style.opacity = String(savedOpacity);
+
     // 解锁状态下点「锁定」按钮回到 overlay。
     lockBtn.addEventListener("click", () => void this.setLocked(true));
     opacity.addEventListener("input", () => {
       this.appEl.style.opacity = opacity.value;
+      updateSettings({ opacity: Number(opacity.value) });
     });
     void this.init();
   }

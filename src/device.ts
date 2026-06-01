@@ -1,5 +1,6 @@
-// 声源选择：列出可选设备，切换时调用后端 start_capture。
+// 声源选择：列出可选设备，切换时调用后端 start_capture，并持久化所选。
 import { invoke } from "@tauri-apps/api/core";
+import { getSettings, updateSettings } from "./settings";
 
 interface DeviceInfo {
   id: string;
@@ -27,6 +28,13 @@ export class DeviceSelector {
         opt.dataset.channels = String(d.channels);
         this.select.appendChild(opt);
       }
+
+      // 恢复上次选择的设备（若仍存在），并切换到它。
+      const saved = getSettings().deviceId;
+      if (saved && devices.some((d) => d.id === saved)) {
+        this.select.value = saved;
+        await this.onChange();
+      }
       this.updateChannelLabel();
     } catch (e) {
       console.error("list_devices 失败", e);
@@ -42,6 +50,7 @@ export class DeviceSelector {
   private async onChange() {
     this.updateChannelLabel();
     const deviceId = this.select.value;
+    updateSettings({ deviceId });
     try {
       await invoke("start_capture", { device_id: deviceId });
     } catch (e) {

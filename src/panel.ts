@@ -1,8 +1,11 @@
-// 控制面板：把滑杆接到后端 set_params 命令（控制通道，低频）。
+// 控制面板：把滑杆接到后端 set_params 命令（控制通道，低频），并持久化。
 import { invoke } from "@tauri-apps/api/core";
+import { getSettings, updateSettings, type Settings } from "./settings";
+
+type ParamKey = "sensitivity" | "smoothing" | "gate";
 
 interface ParamDef {
-  key: "sensitivity" | "smoothing" | "gate";
+  key: ParamKey;
   label: string;
   min: number;
   max: number;
@@ -16,11 +19,13 @@ const DEFS: ParamDef[] = [
 ];
 
 export class ControlPanel {
-  // 与后端 AnalyzerParams 默认值保持一致。
-  private params = { gate: 0.05, smoothing: 0.5, sensitivity: 1.4 };
+  private params: Pick<Settings, ParamKey>;
   private pushTimer: number | undefined;
 
   constructor(container: HTMLElement) {
+    const s = getSettings();
+    this.params = { gate: s.gate, smoothing: s.smoothing, sensitivity: s.sensitivity };
+
     for (const def of DEFS) {
       const row = document.createElement("div");
       row.className = "ctl-row";
@@ -43,12 +48,16 @@ export class ControlPanel {
         const v = Number(input.value);
         this.params[def.key] = v;
         val.textContent = v.toFixed(2);
+        updateSettings({ [def.key]: v });
         this.schedulePush();
       });
 
       row.append(label, input, val);
       container.appendChild(row);
     }
+
+    // 用恢复的设置覆盖后端默认值。
+    void this.push();
   }
 
   /** 节流推送，避免拖动滑杆时高频 IPC。 */
@@ -56,9 +65,13 @@ export class ControlPanel {
     if (this.pushTimer !== undefined) return;
     this.pushTimer = window.setTimeout(() => {
       this.pushTimer = undefined;
-      void invoke("set_params", { ...this.params }).catch((e) =>
-        console.error("set_params 失败", e),
-      );
+      void this.push();
     }, 60);
+  }
+
+  private push() {
+    return invoke("set_params", { ...this.params }).catch((e) =>
+      console.error("set_params 失败", e),
+    );
   }
 }
