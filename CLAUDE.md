@@ -1,7 +1,7 @@
 # CLAUDE.md — 项目记忆 / 开发交接
 
 > 本文件供 Claude Code 自动加载，承接跨设备/跨会话的上下文。
-> 详细内容见：[design.md](./design.md)（产品+技术方案）、[ARCHITECTURE.md](./ARCHITECTURE.md)（架构）、[WINDOWS.md](./WINDOWS.md)（Windows 开发与实机）。
+> 详细内容见：[design.md](./design.md)（产品+技术方案）、[ARCHITECTURE.md](./ARCHITECTURE.md)（架构）、[WINDOWS.md](./WINDOWS.md)（Windows 开发与实机）、[BUILD.md](./BUILD.md)（打包发版）。
 
 ## 远程仓库
 - GitHub: **https://github.com/WhiteWatson/stereo-radar**

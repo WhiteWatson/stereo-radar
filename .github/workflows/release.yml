@@ -1,0 +1,62 @@
+name: release
+
+# 推送形如 v0.1.0 的 tag 时，自动在 macOS + Windows 上各打一次包，
+# 把安装器上传到一个 GitHub Release（草稿，确认后手动发布）。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS：通用二进制（Intel + Apple Silicon）
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+          # Windows：x64 安装器（.msi + .exe）
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 构建并发布
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "stereo-radar ${{ github.ref_name }}"
+          releaseBody: |
+            自动构建的安装包。
+
+            首次打开提示（未签名，自用可忽略）：
+            - macOS：右键 → 打开，确认一次。
+            - Windows：SmartScreen → 更多信息 → 仍要运行。
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
