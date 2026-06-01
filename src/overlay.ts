@@ -1,5 +1,6 @@
 // Overlay 行为：锁定(点击穿透)/解锁(可交互)、显隐、全局热键、透明度。
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { register } from "@tauri-apps/plugin-global-shortcut";
 
 const win = getCurrentWindow();
@@ -36,6 +37,10 @@ export class Overlay {
     } catch (e) {
       console.error("注册全局热键失败", e);
     }
+
+    // 托盘菜单事件，复用同一套切换逻辑以保持状态一致。
+    await listen("menu-toggle-lock", () => void this.toggleLock());
+    await listen("menu-toggle-show", () => void this.toggleShow());
   }
 
   /** 锁定=点击穿透+隐藏控件（纯 overlay）；解锁=可交互+显示控件。 */

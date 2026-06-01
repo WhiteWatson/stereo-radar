@@ -10,6 +10,8 @@ use std::time::Instant;
 
 use stereo_radar_core::capture::{CpalCapture, SyntheticCapture};
 use stereo_radar_core::{Analyzer, AnalyzerParams, AudioCapture, AudioFrame, DeviceInfo};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 
 const SYNTHETIC_ID: &str = "synthetic-orbit";
@@ -106,6 +108,41 @@ pub fn run() {
                 .start(SYNTHETIC_ID)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             app.manage(mgr);
+
+            // 系统托盘/菜单栏：无边框穿透窗的控制入口。
+            let show_i = MenuItem::with_id(app, "toggle-show", "显示 / 隐藏", true, None::<&str>)?;
+            let lock_i = MenuItem::with_id(app, "toggle-lock", "锁定 / 解锁穿透", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &lock_i, &quit_i])?;
+
+            TrayIconBuilder::with_id("main-tray")
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("stereo-radar")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "toggle-show" => {
+                        let _ = app.emit("menu-toggle-show", ());
+                    }
+                    "toggle-lock" => {
+                        let _ = app.emit("menu-toggle-lock", ());
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // 左键点击图标 = 显隐切换。
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let _ = tray.app_handle().emit("menu-toggle-show", ());
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![set_params, list_devices, start_capture])
