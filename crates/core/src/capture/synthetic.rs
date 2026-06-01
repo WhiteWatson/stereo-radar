@@ -77,24 +77,32 @@ impl AudioCapture for SyntheticCapture {
         let frame_size = self.frame_size;
         let orbit_period_s = self.orbit_period_s;
 
-        // 用一个 440Hz 正弦作为声源波形；相位与绕圈角度随时间推进。
+        // 两个声源演示多音源：
+        //   A) 220Hz（低频，仿脚步），顺时针绕圈
+        //   B) 3000Hz（高频，仿枪声），逆时针绕圈、相位错开
+        // 两者会周期性交错，验证空间 + 频段分离。
         let handle = thread::spawn(move || {
             let dt_frame = Duration::from_secs_f64(frame_size as f64 / sample_rate as f64);
             let mut t: f64 = 0.0; // 全局时间（秒）
             let two_pi = std::f32::consts::TAU;
-            let tone_freq = 440.0f32;
+            let period_a = orbit_period_s as f64;
+            let period_b = (orbit_period_s * 1.6) as f64;
 
             while running.load(Ordering::SeqCst) {
                 let mut data: Vec<Vec<f32>> = vec![Vec::with_capacity(frame_size); 8];
 
                 for n in 0..frame_size {
                     let time = t + n as f64 / sample_rate as f64;
-                    // 音源绕圈：角度随时间线性扫过 360°。
-                    let src_angle = ((time / orbit_period_s as f64).fract() as f32) * 360.0 - 180.0;
-                    let gains = SyntheticCapture::pan_gains(src_angle);
-                    let tone = (two_pi * tone_freq * time as f32).sin() * 0.6;
+                    // A：顺时针扫过 360°
+                    let angle_a = ((time / period_a).fract() as f32) * 360.0 - 180.0;
+                    // B：逆时针、起始相位偏移
+                    let angle_b = 90.0 - ((time / period_b).fract() as f32) * 360.0;
+                    let gains_a = SyntheticCapture::pan_gains(angle_a);
+                    let gains_b = SyntheticCapture::pan_gains(angle_b);
+                    let tone_a = (two_pi * 220.0 * time as f32).sin() * 0.5;
+                    let tone_b = (two_pi * 3000.0 * time as f32).sin() * 0.45;
                     for ch in 0..8 {
-                        data[ch].push(tone * gains[ch]);
+                        data[ch].push(tone_a * gains_a[ch] + tone_b * gains_b[ch]);
                     }
                 }
 

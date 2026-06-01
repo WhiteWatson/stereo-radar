@@ -9,11 +9,19 @@ export interface SourcePoint {
 
 const CHANNEL_LABELS = ["FL", "FR", "C", "LFE", "RL", "RR", "SL", "SR"];
 
+interface TrailPoint {
+  x: number;
+  y: number;
+}
+
 export class Radar {
   private ctx: CanvasRenderingContext2D;
   private cx: number;
   private cy: number;
   private radius: number;
+  /** 每个音源 id 的近期位置历史，用于拖尾。 */
+  private trails = new Map<number, TrailPoint[]>();
+  private static readonly TRAIL_LEN = 18;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -74,6 +82,21 @@ export class Radar {
     const hue = 50 * (1 - s.intensity);
     const color = `hsl(${hue}, 95%, 55%)`;
 
+    // 拖尾
+    const trail = this.trails.get(s.id);
+    if (trail && trail.length > 1) {
+      for (let i = 1; i < trail.length; i++) {
+        const a = i / trail.length;
+        ctx.strokeStyle = `hsla(${hue}, 95%, 55%, ${a * 0.5})`;
+        ctx.lineWidth = 1 + 2 * a;
+        ctx.beginPath();
+        ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+        ctx.lineTo(trail[i].x, trail[i].y);
+        ctx.stroke();
+      }
+    }
+
+    // 光晕 + 核心
     const grad = ctx.createRadialGradient(x, y, 0, x, y, size);
     grad.addColorStop(0, color);
     grad.addColorStop(1, "transparent");
@@ -88,7 +111,25 @@ export class Radar {
     ctx.fill();
   }
 
+  private updateTrails(sources: SourcePoint[]) {
+    const alive = new Set<number>();
+    for (const s of sources) {
+      alive.add(s.id);
+      const r = this.radius * (0.35 + 0.6 * s.intensity);
+      const [x, y] = this.polar(s.angle, r);
+      const trail = this.trails.get(s.id) ?? [];
+      trail.push({ x, y });
+      while (trail.length > Radar.TRAIL_LEN) trail.shift();
+      this.trails.set(s.id, trail);
+    }
+    // 清理消失的音源轨迹
+    for (const id of this.trails.keys()) {
+      if (!alive.has(id)) this.trails.delete(id);
+    }
+  }
+
   render(sources: SourcePoint[]) {
+    this.updateTrails(sources);
     this.drawGrid();
     for (const s of sources) this.drawSource(s);
   }

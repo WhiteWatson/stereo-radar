@@ -11,3 +11,4 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { workspace = true }
+rustfft = "6"

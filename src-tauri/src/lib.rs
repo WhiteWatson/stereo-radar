@@ -20,10 +20,13 @@ struct Shared {
 /// 持有采集实例，防止被 drop（其内部线程依赖它存活）。
 struct CaptureGuard(#[allow(dead_code)] Mutex<SyntheticCapture>);
 
-/// 控制通道：更新 DSP 参数。
+/// 控制通道：更新 DSP 参数（其余字段保持当前值）。
 #[tauri::command]
 fn set_params(shared: tauri::State<'_, Arc<Shared>>, gate: f32, smoothing: f32, sensitivity: f32) {
-    *shared.params.lock().unwrap() = AnalyzerParams { gate, smoothing, sensitivity };
+    let mut p = shared.params.lock().unwrap();
+    p.gate = gate;
+    p.smoothing = smoothing;
+    p.sensitivity = sensitivity;
 }
 
 /// 控制通道：列出可选音频来源。
