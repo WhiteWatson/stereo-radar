@@ -3,6 +3,11 @@
 > 本文件供 Claude Code 自动加载，承接跨设备/跨会话的上下文。
 > 详细内容见：[design.md](./design.md)（产品+技术方案）、[ARCHITECTURE.md](./ARCHITECTURE.md)（架构）、[WINDOWS.md](./WINDOWS.md)（Windows 开发与实机）。
 
+## 远程仓库
+- GitHub: **https://github.com/WhiteWatson/stereo-radar**
+- clone：`git clone https://github.com/WhiteWatson/stereo-radar.git`
+- 提交身份用个人邮箱 `White <734004037@qq.com>`（本仓库 --local 已配，勿用工作邮箱）。
+
 ## 项目是什么
 把 FPS 游戏的**音源方位实时可视化**的桌面 overlay 工具。用户耳机差、听不出敌人方位，
 本工具以玩家为中心画 360° 雷达，实时显示多个声源的方位与强度。
@@ -65,9 +70,9 @@ cargo run -p stereo-radar-core --example accuracy        # 精度基准
 
 ## 约定
 - 提交信息中文、结尾带 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
-- 默认分支 main；目前**无远程**，跨设备需先建 GitHub 仓库 push（见 WINDOWS.md §1）。
+- 默认分支 main；远程已配 origin（见上「远程仓库」）。
 
 ## 跨设备继续开发的第一步
-1. 在另一台机器 `git clone`（或先在本机建 GitHub remote 并 push）。
+1. 在另一台机器 `git clone https://github.com/WhiteWatson/stereo-radar.git`。
 2. 装工具链 → `npm install` → `npm run tauri dev` 确认合成源雷达能跑。
 3. Windows 上按 WINDOWS.md 配 7.1 声卡，切设备做实机验证。
