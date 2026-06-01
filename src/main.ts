@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Radar, ChannelBars, type SourcePoint } from "./radar";
 import { ControlPanel } from "./panel";
 import { DeviceSelector } from "./device";
+import { Overlay } from "./overlay";
 
 interface FramePayload {
   ts: number;
@@ -20,6 +21,14 @@ const radar = new Radar(canvas);
 const bars = new ChannelBars(barsEl);
 new ControlPanel(panelEl);
 new DeviceSelector(deviceSel, deviceCh);
+
+// Overlay 行为：锁定/穿透、显隐、热键、透明度。
+new Overlay(
+  document.getElementById("hint") as HTMLElement,
+  document.getElementById("lock-btn") as HTMLElement,
+  document.getElementById("opacity") as HTMLInputElement,
+  document.getElementById("app") as HTMLElement,
+);
 
 // 后端推送与渲染解耦：事件只更新最新帧，rAF 负责绘制（带背压，丢旧帧）。
 let latest: FramePayload | null = null;

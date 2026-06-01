@@ -7,43 +7,89 @@
     <style>
       :root { color-scheme: dark; }
       * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
       body {
-        margin: 0;
         font-family: system-ui, -apple-system, "PingFang SC", sans-serif;
-        background: #0c0e14;
         color: #cfd6e4;
+        user-select: none;
+      }
+      #app {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 14px;
-        padding: 16px;
+        gap: 12px;
+        padding: 10px;
+        transition: opacity .15s linear;
       }
-      h1 { font-size: 14px; font-weight: 600; margin: 0; color: #8ea0c0; letter-spacing: 1px; }
-      #radar { background: radial-gradient(circle at center, #11151f 0%, #0a0c11 70%); border-radius: 50%; }
+
+      /* 顶栏：可拖动，仅解锁时显示 */
+      .topbar {
+        width: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 10px;
+        background: rgba(18, 22, 32, 0.9);
+        border: 1px solid #1e2638;
+        border-radius: 8px;
+        cursor: grab;
+      }
+      .topbar:active { cursor: grabbing; }
+      .topbar .title { font-size: 12px; font-weight: 600; color: #8ea0c0; letter-spacing: 1px; }
+      .topbar button {
+        cursor: pointer; font-size: 11px; color: #cfd6e4;
+        background: #233; border: 1px solid #2a3a52; border-radius: 5px; padding: 2px 8px;
+      }
+      .topbar button:hover { background: #2a3f5a; }
+
+      /* 雷达盘：自带背景，浮空可见 */
+      #radar { background: radial-gradient(circle at center, rgba(17,21,31,0.78) 0%, rgba(10,12,17,0.7) 70%); border-radius: 50%; }
+
       .bars { display: flex; gap: 6px; align-items: flex-end; height: 70px; }
       .bar { width: 22px; background: #1c2433; border-radius: 3px 3px 0 0; position: relative; transition: height .05s linear, background .1s linear; }
       .bar span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: #566c8a; }
-      .hint { font-size: 11px; color: #4a5266; }
-      #device-row { width: 300px; }
+
+      .hint { font-size: 11px; color: #566c8a; text-shadow: 0 1px 2px #000; }
+
+      .card { background: rgba(18,22,32,0.92); border: 1px solid #1e2638; border-radius: 8px; padding: 10px 12px; width: 320px; }
       #device-row select { width: 100%; background: #11151f; color: #cfd6e4; border: 1px solid #1e2638; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
-      #panel { width: 300px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+      #panel { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
       .ctl-row { display: grid; grid-template-columns: 48px 1fr 40px; align-items: center; gap: 8px; font-size: 12px; }
       .ctl-row label { color: #8ea0c0; }
       .ctl-row input[type="range"] { width: 100%; accent-color: #4a86ff; }
       .ctl-val { text-align: right; color: #6b7790; font-variant-numeric: tabular-nums; }
+
+      /* 锁定(overlay)状态：只留雷达 + 提示，其余隐藏，鼠标穿透 */
+      body.locked .hide-when-locked { display: none !important; }
     </style>
   </head>
   <body>
-    <h1>STEREO RADAR · 阶段2 多音源</h1>
-    <div class="ctl-row" id="device-row">
-      <label for="device">声源</label>
-      <select id="device"></select>
-      <span class="ctl-val" id="device-ch"></span>
+    <div id="app">
+      <div class="topbar hide-when-locked" data-tauri-drag-region>
+        <span class="title" data-tauri-drag-region>STEREO RADAR</span>
+        <button id="lock-btn" title="锁定为穿透 overlay (⌘⇧L)">锁定 ⌘⇧L</button>
+      </div>
+
+      <canvas id="radar" width="320" height="320"></canvas>
+
+      <div class="hint" id="hint"></div>
+
+      <div class="bars hide-when-locked" id="bars"></div>
+
+      <div class="card hide-when-locked">
+        <div class="ctl-row" id="device-row">
+          <label for="device">声源</label>
+          <select id="device"></select>
+          <span class="ctl-val" id="device-ch"></span>
+        </div>
+        <div id="panel"></div>
+        <div class="ctl-row" style="margin-top:8px">
+          <label for="opacity">透明</label>
+          <input id="opacity" type="range" min="0.3" max="1" step="0.05" value="1" />
+          <span class="ctl-val">α</span>
+        </div>
+      </div>
     </div>
-    <canvas id="radar" width="360" height="360"></canvas>
-    <div class="bars" id="bars"></div>
-    <div class="hint">两个合成音源：低频(220Hz)顺时针 + 高频(3kHz)逆时针，各带拖尾</div>
-    <div id="panel"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

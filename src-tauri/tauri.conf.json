@@ -11,16 +11,19 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
         "title": "stereo-radar",
-        "width": 460,
-        "height": 560,
+        "width": 380,
+        "height": 580,
         "resizable": true,
-        "transparent": false,
-        "decorations": true,
-        "alwaysOnTop": false
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "skipTaskbar": false
       }
     ],
     "security": {

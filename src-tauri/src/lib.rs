@@ -91,6 +91,7 @@ pub fn run() {
     let params = Arc::new(Mutex::new(AnalyzerParams::default()));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(params.clone())
         .setup(move |app| {
             let mgr = Arc::new(Mutex::new(CaptureManager {
