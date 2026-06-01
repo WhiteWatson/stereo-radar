@@ -1,0 +1,19 @@
+[package]
+name = "stereo-radar-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "stereo-radar Tauri 外壳：编排管线、窗口、事件推送"
+
+[lib]
+name = "stereo_radar_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+stereo-radar-core = { path = "../crates/core" }

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>stereo-radar</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "PingFang SC", sans-serif;
+        background: #0c0e14;
+        color: #cfd6e4;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 16px;
+      }
+      h1 { font-size: 14px; font-weight: 600; margin: 0; color: #8ea0c0; letter-spacing: 1px; }
+      #radar { background: radial-gradient(circle at center, #11151f 0%, #0a0c11 70%); border-radius: 50%; }
+      .bars { display: flex; gap: 6px; align-items: flex-end; height: 70px; }
+      .bar { width: 22px; background: #1c2433; border-radius: 3px 3px 0 0; position: relative; transition: height .05s linear, background .1s linear; }
+      .bar span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: #566c8a; }
+      .hint { font-size: 11px; color: #4a5266; }
+    </style>
+  </head>
+  <body>
+    <h1>STEREO RADAR · 阶段1</h1>
+    <canvas id="radar" width="360" height="360"></canvas>
+    <div class="bars" id="bars"></div>
+    <div class="hint">合成音源绕圈中 · 光点应顺时针转动</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

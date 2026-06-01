@@ -1,0 +1,13 @@
+[package]
+name = "stereo-radar-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "平台无关核心库：音频采集抽象 + 方位 DSP"
+
+[lib]
+name = "stereo_radar_core"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
