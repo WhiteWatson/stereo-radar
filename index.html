@@ -24,6 +24,11 @@
       .bar { width: 22px; background: #1c2433; border-radius: 3px 3px 0 0; position: relative; transition: height .05s linear, background .1s linear; }
       .bar span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: #566c8a; }
       .hint { font-size: 11px; color: #4a5266; }
+      #panel { width: 300px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+      .ctl-row { display: grid; grid-template-columns: 48px 1fr 40px; align-items: center; gap: 8px; font-size: 12px; }
+      .ctl-row label { color: #8ea0c0; }
+      .ctl-row input[type="range"] { width: 100%; accent-color: #4a86ff; }
+      .ctl-val { text-align: right; color: #6b7790; font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
@@ -31,6 +36,7 @@
     <canvas id="radar" width="360" height="360"></canvas>
     <div class="bars" id="bars"></div>
     <div class="hint">两个合成音源：低频(220Hz)顺时针 + 高频(3kHz)逆时针，各带拖尾</div>
+    <div id="panel"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

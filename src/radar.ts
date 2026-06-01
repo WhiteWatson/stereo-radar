@@ -39,6 +39,15 @@ export class Radar {
     const { ctx } = this;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // 前半区(上)淡底色，帮助前后辨别
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, this.radius, Math.PI, Math.PI * 2); // 上半圆
+    ctx.closePath();
+    ctx.fillStyle = "rgba(74, 134, 255, 0.05)";
+    ctx.fill();
+    ctx.restore();
+
     // 同心圆
     ctx.strokeStyle = "#1e2638";
     ctx.lineWidth = 1;
