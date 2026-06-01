@@ -58,6 +58,15 @@
       .ctl-row label { color: #8ea0c0; }
       .ctl-row input[type="range"] { width: 100%; accent-color: #4a86ff; }
       .ctl-val { text-align: right; color: #6b7790; font-variant-numeric: tabular-nums; }
+      .device-status { margin-top: 6px; font-size: 11px; line-height: 1.4; }
+      .device-status.ok { color: #4ad07a; }
+      .device-status.warn { color: #e0b020; }
+      .device-status.info { color: #6b7790; }
+      #setup-guide { margin-top: 6px; font-size: 11px; color: #8ea0c0; }
+      #setup-guide summary { cursor: pointer; color: #6b8fd0; }
+      #setup-guide ol { margin: 6px 0; padding-left: 18px; }
+      #setup-guide li { margin: 2px 0; }
+      #setup-guide .muted { color: #566c8a; }
 
       /* 锁定(overlay)状态：只留雷达 + 提示，其余隐藏，鼠标穿透 */
       body.locked .hide-when-locked { display: none !important; }
@@ -82,6 +91,17 @@
           <select id="device"></select>
           <span class="ctl-val" id="device-ch"></span>
         </div>
+        <div class="device-status info" id="device-status"></div>
+        <details id="setup-guide">
+          <summary>如何获得完整 360° 方位？</summary>
+          <ol>
+            <li>装虚拟 7.1 声卡（Win: VoiceMeeter Potato / mac: BlackHole）。</li>
+            <li>把游戏输出路由到该虚拟设备，并让它回放到你的耳机（否则听不见）。</li>
+            <li>游戏内音频开 <b>7.1 环绕声</b>。</li>
+            <li>这里「声源」选该虚拟设备的录音端，确认显示 <b>8ch</b>。</li>
+          </ol>
+          <span class="muted">详细步骤见仓库 WINDOWS.md。</span>
+        </details>
         <div id="panel"></div>
         <div class="ctl-row" style="margin-top:8px">
           <label for="opacity">透明</label>

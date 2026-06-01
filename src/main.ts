@@ -16,11 +16,12 @@ const panelEl = document.getElementById("panel") as HTMLElement;
 
 const deviceSel = document.getElementById("device") as HTMLSelectElement;
 const deviceCh = document.getElementById("device-ch") as HTMLElement;
+const deviceStatus = document.getElementById("device-status") as HTMLElement;
 
 const radar = new Radar(canvas);
 const bars = new ChannelBars(barsEl);
 new ControlPanel(panelEl);
-new DeviceSelector(deviceSel, deviceCh);
+new DeviceSelector(deviceSel, deviceCh, deviceStatus);
 
 // Overlay 行为：锁定/穿透、显隐、热键、透明度。
 new Overlay(
