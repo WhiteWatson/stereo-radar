@@ -1,0 +1,24 @@
+# Rust
+/target/
+**/target/
+# 注：本项目是应用(binary)，按惯例应提交 Cargo.lock，故不忽略
+
+# Tauri
+/src-tauri/target/
+/src-tauri/gen/
+
+# Node / 前端
+node_modules/
+dist/
+.vite/
+*.log
+
+# 测试音频（大文件，不入库；按需本地生成）
+assets/*.wav
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
