@@ -18,9 +18,13 @@ use rustfft::{Fft, FftPlanner};
 
 use crate::model::{AudioFrame, FramePayload, SourcePoint, CHANNEL_ANGLES_71};
 
-/// 角度直方图分辨率（5°/bin）。
+/// 7.1 角度直方图分辨率（5°/bin，环形 360°）。
 const NUM_BINS: usize = 72;
 const BIN_WIDTH_DEG: f32 = 360.0 / NUM_BINS as f32;
+
+/// 立体声角度直方图分辨率（3°/bin，非环形，覆盖前向 [-90,90]）。
+const STEREO_BINS: usize = 61;
+const STEREO_BIN_WIDTH_DEG: f32 = 180.0 / (STEREO_BINS as f32 - 1.0);
 
 /// 可调参数（由控制通道注入）。
 #[derive(Debug, Clone, Copy)]
@@ -130,11 +134,26 @@ impl Analyzer {
             spectra.push(buf[..half].iter().map(|c| c.norm()).collect());
         }
 
-        // 频点范围：跳过 DC 和极低/极高，聚焦有方位意义的频段。
-        let bin_lo = ((50.0 * n as f32) / frame.sample_rate as f32).floor() as usize;
-        let bin_hi = (((12_000.0 * n as f32) / frame.sample_rate as f32).ceil() as usize).min(half);
+        // 按声道数分派：2ch 走立体声 ILD 法；其余走 7.1 向量合成法。
+        let detected = if frame.channels == 2 {
+            self.detect_stereo(&spectra, n, frame.sample_rate)
+        } else {
+            self.detect_surround(&spectra, n, frame.sample_rate)
+        };
 
-        // 角度直方图：逐频点向量合成，按方向性加权累加。
+        // 跨帧跟踪 + 平滑，赋稳定 id。
+        let sources = self.track(detected);
+        self.tracked = sources.clone();
+
+        FramePayload { ts, sources, channel_energies: energies }
+    }
+
+    /// 7.1 路径：逐频点向量合成 → 360° 环形角度直方图 → 多峰。
+    fn detect_surround(&self, spectra: &[Vec<f32>], n: usize, sr: u32) -> Vec<SourcePoint> {
+        let half = n / 2;
+        let bin_lo = ((50.0 * n as f32) / sr as f32).floor() as usize;
+        let bin_hi = (((12_000.0 * n as f32) / sr as f32).ceil() as usize).min(half);
+
         let mut hist = [0.0f32; NUM_BINS];
         for k in bin_lo..bin_hi {
             let (mut vx, mut vy, mut mag) = (0.0f32, 0.0f32, 0.0f32);
@@ -157,20 +176,43 @@ impl Analyzer {
             Self::deposit(&mut hist, angle, energy);
         }
 
-        // 环形 3-tap 平滑。
         let hist = Self::smooth_circular(&hist);
         let global_max = hist.iter().cloned().fold(0.0f32, f32::max);
+        if global_max <= 1e-9 {
+            return Vec::new();
+        }
+        self.pick_peaks(&hist, global_max)
+    }
 
-        let mut detected = Vec::new();
-        if global_max > 1e-9 {
-            detected = self.pick_peaks(&hist, global_max);
+    /// 立体声路径：逐频点用 ILD（左右能量比）反推声像 → 180° 前向直方图 → 多峰。
+    /// 角度范围 [-90°(全左) .. 0(中/前) .. +90°(全右)]；**前后不可区分**，统一落在前向半圆。
+    fn detect_stereo(&self, spectra: &[Vec<f32>], n: usize, sr: u32) -> Vec<SourcePoint> {
+        let half = n / 2;
+        let bin_lo = ((150.0 * n as f32) / sr as f32).floor() as usize;
+        let bin_hi = (((8_000.0 * n as f32) / sr as f32).ceil() as usize).min(half);
+
+        let (left, right) = (&spectra[0], spectra.get(1).unwrap_or(&spectra[0]));
+
+        let mut hist = [0.0f32; STEREO_BINS];
+        for k in bin_lo..bin_hi {
+            let l = left.get(k).copied().unwrap_or(0.0);
+            let r = right.get(k).copied().unwrap_or(0.0);
+            let mag = l + r;
+            if mag <= 1e-9 {
+                continue;
+            }
+            // 反演恒功率声像平移：φ=atan2(|R|,|L|)∈[0,π/2] → t∈[0,1] → 角度 [-90,90]。
+            let t = r.atan2(l) / std::f32::consts::FRAC_PI_2;
+            let angle = (t - 0.5) * 180.0;
+            Self::deposit_stereo(&mut hist, angle, mag);
         }
 
-        // 跨帧跟踪 + 平滑，赋稳定 id。
-        let sources = self.track(detected);
-        self.tracked = sources.clone();
-
-        FramePayload { ts, sources, channel_energies: energies }
+        let hist = Self::smooth_edges(&hist);
+        let global_max = hist.iter().cloned().fold(0.0f32, f32::max);
+        if global_max <= 1e-9 {
+            return Vec::new();
+        }
+        self.pick_peaks_stereo(&hist, global_max)
     }
 
     /// 把能量投到最近直方图 bin，并以三角权重溢出到相邻 bin（平滑）。
@@ -181,6 +223,69 @@ impl Analyzer {
             let idx = (center + off).rem_euclid(NUM_BINS as isize) as usize;
             hist[idx] += energy * w;
         }
+    }
+
+    /// 立体声直方图投放（非环形，边界截断）。角度 [-90,90] → bin [0,STEREO_BINS)。
+    fn deposit_stereo(hist: &mut [f32; STEREO_BINS], angle_deg: f32, energy: f32) {
+        let pos = (angle_deg + 90.0) / STEREO_BIN_WIDTH_DEG;
+        let center = pos.round() as isize;
+        for (off, w) in [(-1isize, 0.25f32), (0, 0.5), (1, 0.25)] {
+            let idx = center + off;
+            if idx >= 0 && (idx as usize) < STEREO_BINS {
+                hist[idx as usize] += energy * w;
+            }
+        }
+    }
+
+    /// 非环形 3-tap 平滑（边界用自身代替越界邻居）。
+    fn smooth_edges(hist: &[f32; STEREO_BINS]) -> [f32; STEREO_BINS] {
+        let mut out = [0.0f32; STEREO_BINS];
+        for i in 0..STEREO_BINS {
+            let l = if i > 0 { hist[i - 1] } else { hist[i] };
+            let r = if i + 1 < STEREO_BINS { hist[i + 1] } else { hist[i] };
+            out[i] = 0.25 * l + 0.5 * hist[i] + 0.25 * r;
+        }
+        out
+    }
+
+    /// 立体声非环形挑峰，角度范围 [-90,90]。
+    fn pick_peaks_stereo(&self, hist: &[f32; STEREO_BINS], global_max: f32) -> Vec<SourcePoint> {
+        let abs_thresh = global_max * self.params.peak_ratio;
+        let mut cands: Vec<(f32, f32)> = Vec::new();
+        for i in 0..STEREO_BINS {
+            let h = hist[i];
+            let l = if i > 0 { hist[i - 1] } else { 0.0 };
+            let r = if i + 1 < STEREO_BINS { hist[i + 1] } else { 0.0 };
+            if h >= l && h >= r && h >= abs_thresh {
+                let denom = l - 2.0 * h + r;
+                let delta = if denom.abs() > 1e-9 { 0.5 * (l - r) / denom } else { 0.0 };
+                let angle = -90.0 + (i as f32 + delta) * STEREO_BIN_WIDTH_DEG;
+                cands.push((angle.clamp(-90.0, 90.0), h));
+            }
+        }
+        cands.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let mut chosen: Vec<(f32, f32)> = Vec::new();
+        for (angle, h) in cands {
+            if chosen.len() >= self.params.max_sources {
+                break;
+            }
+            if chosen.iter().all(|(a, _)| (a - angle).abs() >= self.params.min_separation_deg) {
+                chosen.push((angle, h));
+            }
+        }
+
+        chosen
+            .into_iter()
+            .filter_map(|(angle, h)| {
+                let intensity = (h.sqrt() * self.params.sensitivity).clamp(0.0, 1.0);
+                if intensity < self.params.gate {
+                    None
+                } else {
+                    Some(SourcePoint { id: 0, angle, intensity })
+                }
+            })
+            .collect()
     }
 
     fn smooth_circular(hist: &[f32; NUM_BINS]) -> [f32; NUM_BINS] {
@@ -359,5 +464,53 @@ mod tests {
         let id1 = a.process(&f, 0).sources[0].id;
         let id2 = a.process(&f, 1).sources[0].id;
         assert_eq!(id1, id2, "同一持续音源跨帧 id 应稳定");
+    }
+
+    // ---- 立体声路径 ----
+
+    /// 构造 2 声道帧，把一个 freq 音按恒功率平移到 [-1(左)..0(中)..1(右)] 的 pan。
+    fn stereo_tone(n: usize, sr: u32, freq: f32, pan: f32, amp: f32) -> AudioFrame {
+        let t = (pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2; // [0,π/2]
+        let (gl, gr) = (t.cos(), t.sin());
+        let mut l = vec![0.0f32; n];
+        let mut r = vec![0.0f32; n];
+        for i in 0..n {
+            let s = amp * (std::f32::consts::TAU * freq * i as f32 / sr as f32).sin();
+            l[i] = s * gl;
+            r[i] = s * gr;
+        }
+        AudioFrame::new(2, sr, vec![l, r])
+    }
+
+    #[test]
+    fn stereo_pan_maps_to_lateral_angle() {
+        let sr = 48_000;
+        let mut a = Analyzer::new(AnalyzerParams { smoothing: 0.0, ..Default::default() });
+        for (pan, expect) in [(-1.0, -90.0), (0.0, 0.0), (1.0, 90.0)] {
+            let p = a.process(&stereo_tone(2048, sr, 700.0, pan, 0.5), 0);
+            let s = p.sources.first().expect("应有一个音源");
+            assert!((s.angle - expect).abs() < 8.0, "pan={pan} 期望≈{expect}°, got {}", s.angle);
+        }
+    }
+
+    #[test]
+    fn stereo_two_sources_separate() {
+        let sr = 48_000;
+        let mut a = Analyzer::new(AnalyzerParams { smoothing: 0.0, ..Default::default() });
+        // 左偏低频 + 右偏高频（不同频谱）
+        let lo = stereo_tone(2048, sr, 300.0, -0.6, 0.5);
+        let hi = stereo_tone(2048, sr, 3500.0, 0.6, 0.5);
+        let mut data = vec![vec![0.0f32; 2048]; 2];
+        for ch in 0..2 {
+            for i in 0..2048 {
+                data[ch][i] = lo.data[ch][i] + hi.data[ch][i];
+            }
+        }
+        let p = a.process(&AudioFrame::new(2, sr, data), 0);
+        assert_eq!(p.sources.len(), 2, "应分离出两个音源, got {:?}", p.sources);
+        let mut angles: Vec<f32> = p.sources.iter().map(|s| s.angle).collect();
+        angles.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        assert!(angles[0] < -20.0, "左源应在负角, got {}", angles[0]);
+        assert!(angles[1] > 20.0, "右源应在正角, got {}", angles[1]);
     }
 }
