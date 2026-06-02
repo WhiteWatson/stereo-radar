@@ -6,9 +6,25 @@
 
 mod cpal_capture;
 mod synthetic;
+#[cfg(windows)]
+mod wasapi_process;
 
 pub use cpal_capture::CpalCapture;
 pub use synthetic::SyntheticCapture;
+#[cfg(windows)]
+pub use wasapi_process::WasapiProcessCapture;
+
+/// 列出可按进程采集的音频进程（仅 Windows 有内容；其它平台返回空）。
+pub fn list_audio_processes() -> Vec<DeviceInfo> {
+    #[cfg(windows)]
+    {
+        wasapi_process::list_audio_processes()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
 
 use crate::model::AudioFrame;
 

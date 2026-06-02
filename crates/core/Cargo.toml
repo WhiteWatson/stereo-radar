@@ -13,3 +13,17 @@ path = "src/lib.rs"
 serde = { workspace = true }
 rustfft = "6"
 cpal = "0.15"
+
+# Windows 专用：进程级 loopback 采集（无需虚拟声卡）
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.58"
+windows = { version = "0.58", features = [
+    "implement",
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+] }

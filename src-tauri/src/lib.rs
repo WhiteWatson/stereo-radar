@@ -8,7 +8,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use stereo_radar_core::capture::{CpalCapture, SyntheticCapture};
+use stereo_radar_core::capture::{list_audio_processes, CpalCapture, SyntheticCapture};
+#[cfg(windows)]
+use stereo_radar_core::capture::WasapiProcessCapture;
 use stereo_radar_core::{Analyzer, AnalyzerParams, AudioCapture, AudioFrame, DeviceInfo};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -32,6 +34,14 @@ impl CaptureManager {
 
         let mut cap: Box<dyn AudioCapture> = if device_id.starts_with("synthetic-") {
             Box::new(SyntheticCapture::new())
+        } else if device_id.starts_with("pid:") {
+            // 进程级 loopback（仅 Windows）。
+            #[cfg(not(windows))]
+            return Err("进程级采集仅在 Windows 上支持".into());
+            #[cfg(windows)]
+            {
+                Box::new(WasapiProcessCapture::new())
+            }
         } else {
             Box::new(CpalCapture::new())
         };
@@ -75,7 +85,8 @@ fn set_params(
 /// 控制通道：列出可选来源（合成源 + 真实输入设备）。
 #[tauri::command]
 fn list_devices() -> Vec<DeviceInfo> {
-    let mut v = SyntheticCapture::list_devices();
+    let mut v = list_audio_processes(); // Windows: 进程列表（优先，便于选游戏）
+    v.extend(SyntheticCapture::list_devices());
     v.extend(CpalCapture::list_devices());
     v
 }
