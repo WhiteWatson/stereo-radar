@@ -17,13 +17,20 @@
 ②开源可定制 ③不绑硬件、跨平台。决定"做到底"，不止做技术练习。
 
 ## 已锁定的核心决策（不要轻易推翻）
-1. **方位原理**：不硬解立体声。让游戏输出 **7.1 环绕声**，抓 8 声道，按声道能量反推方位。
-2. **应用隔离**：用**虚拟 7.1 声卡**路由（Windows=VoiceMeeter Potato / macOS=BlackHole）。
-   工具只"抓某个虚拟设备"，与具体游戏解耦 → 通用。游戏路由到虚拟设备，聊天软件留在真实耳机。
-   ⚠️ 虚拟设备必须**同时回放到耳机**（监听），否则玩家听不见。
-3. **技术栈**：Rust 核心 + Tauri/Web UI。采集用跨平台 **cpal**（Win 走 WASAPI、mac 走 CoreAudio）。
-4. **平台**：**Windows 是一等公民（正式使用）**，macOS 仅开发机（游戏在 Windows）。
-5. **跨平台**：同一代码库；采集层 `AudioCapture` trait 抽象，DSP/UI 100% 共享。
+> ⚠️ **重大转向（2026-06）**：用户耳机只能输入 **2 声道**（厂商"7.1"是 HRTF 模拟，游戏实际输出立体声）。
+> 已从 7.1 方案**转为立体声方案**。7.1 代码保留为 ≥6ch 时的兜底，但主线是立体声。
+
+1. **方位原理（立体声）**：逐频点 `atan2(|R|,|L|)` 反演恒功率声像 → 180° 前向直方图 → 多峰。
+   - 左右定位很准（基准 **平均 0.69°**），**前后物理不可分**（雷达后半圆置灰标"未知"）。
+   - DSP 按声道数分派：2ch 走立体声(ILD)，≥6ch 走旧 7.1 向量合成（零额外成本保留）。
+2. **应用隔离（已不用 VoiceMeeter）**：Windows **WASAPI 进程级 loopback**（`WasapiProcessCapture`），
+   直接抓目标进程(如 PUBG)的 2 声道，聊天等其它进程天然排除。**零配置、无需任何虚拟声卡**。
+3. **技术栈**：Rust 核心 + Tauri/Web UI。采集 trait `AudioCapture` 多实现：
+   `SyntheticCapture`(合成,含orbit/stereo两种) · `CpalCapture`(跨平台输入设备) · `WasapiProcessCapture`(Win进程loopback)。
+4. **平台**：**Windows 一等公民（正式使用）**，macOS 仅开发机。
+5. **验证技巧**：Windows-only COM 代码可在 Mac 上交叉检查：
+   `cargo check -p stereo-radar-core --target x86_64-pc-windows-gnu`（已验证 core 通过）。
+   注：`cargo check` 整个 app 在 Mac 会因 tauri-winres 交叉编译限制失败，与业务代码无关，真 Windows 构建正常。
 
 ## 架构一句话
 单向管线：`Capture(平台相关,trait后) → DSP(无状态,平台无关) → Bridge(Tauri编排+emit) → UI(Canvas雷达)`。
@@ -56,8 +63,12 @@ src/                 前端: radar.ts(雷达+拖尾) panel.ts(调参) device.ts(
 - [x] 阶段5-C 系统托盘/菜单栏图标（显隐/锁定/退出，左键显隐）
 - [x] 阶段5-B 设置持久化（参数/设备/透明度=localStorage；窗口位置=window-state 插件）
 - [x] 阶段5-D 设备检测引导（按声道数提示方位完整度 + 配置指引）
-- [ ] **阶段5-A（必需，需 Windows）：上 Windows 按 WINDOWS.md 配 VoiceMeeter 7.1 实机验证方位**
-- [ ] 阶段5-E（需真实录音）：用真实游戏音频调 gate/平滑默认值，抗底噪/瞬态
+- [x] 立体声转向：ILD 算法(基准0.69°) + 2ch合成源 + 雷达后方置灰 + stereo_accuracy 基准
+- [x] #1 设备刷新按钮 · #3 alert→toast 告警治理
+- [x] #2 WasapiProcessCapture 进程级 loopback(无需虚拟声卡)，core 已交叉编译验证
+- [ ] **下一步(需 Windows)：pull→在 Windows 上 build→下拉选游戏进程→验证抓取+左右方位**
+  - WASAPI COM 代码是盲写+交叉检查过的，真机首跑可能仍有运行期问题(激活/格式/PROPVARIANT)，需联调
+- [ ] 真实游戏音频调 gate/平滑默认值，抗底噪/瞬态
 - [ ] 可选：雷达视觉风格、音源标签、配置预设(每游戏)、开机自启
 
 ## 怎么跑
