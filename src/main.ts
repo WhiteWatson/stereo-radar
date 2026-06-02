@@ -40,7 +40,9 @@ listen<FramePayload>("sources", (event) => {
 
 function loop() {
   if (latest) {
-    radar.render(latest.sources);
+    // 2 声道（立体声）→ 仅前向有效，后方标未知。
+    const frontOnly = (latest.channel_energies?.length ?? 0) <= 2;
+    radar.render(latest.sources, frontOnly);
     bars.update(latest.channel_energies);
   }
   requestAnimationFrame(loop);

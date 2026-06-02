@@ -30,7 +30,7 @@ impl CaptureManager {
             c.stop();
         }
 
-        let mut cap: Box<dyn AudioCapture> = if device_id == SYNTHETIC_ID {
+        let mut cap: Box<dyn AudioCapture> = if device_id.starts_with("synthetic-") {
             Box::new(SyntheticCapture::new())
         } else {
             Box::new(CpalCapture::new())

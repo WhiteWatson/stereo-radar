@@ -51,20 +51,39 @@ impl SyntheticCapture {
         }
         gains
     }
+
+    /// 恒功率立体声平移：pan∈[-1(左),1(右)] → (gainL, gainR)。
+    fn stereo_pan(pan: f32) -> (f32, f32) {
+        let t = (pan.clamp(-1.0, 1.0) + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
+        (t.cos(), t.sin())
+    }
+}
+
+/// 周期为 1 的三角波，值域 [-1, 1]（用于让 pan 在左右间来回）。
+fn triangle(x: f32) -> f32 {
+    let p = x - x.floor(); // [0,1)
+    4.0 * (p - 0.5).abs() - 1.0
 }
 
 impl AudioCapture for SyntheticCapture {
     fn list_devices() -> Vec<DeviceInfo> {
-        vec![DeviceInfo {
-            id: "synthetic-orbit".into(),
-            name: "合成音源（绕圈，开发用）".into(),
-            channels: 8,
-        }]
+        vec![
+            DeviceInfo {
+                id: "synthetic-orbit".into(),
+                name: "合成·绕圈 (7.1, 开发用)".into(),
+                channels: 8,
+            },
+            DeviceInfo {
+                id: "synthetic-stereo".into(),
+                name: "合成·左右移动 (立体声, 开发用)".into(),
+                channels: 2,
+            },
+        ]
     }
 
     fn start(
         &mut self,
-        _device_id: &str,
+        device_id: &str,
         mut on_frame: Box<dyn FnMut(AudioFrame) + Send>,
     ) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
@@ -76,38 +95,50 @@ impl AudioCapture for SyntheticCapture {
         let sample_rate = self.sample_rate;
         let frame_size = self.frame_size;
         let orbit_period_s = self.orbit_period_s;
+        let stereo = device_id == "synthetic-stereo";
 
         // 两个声源演示多音源：
-        //   A) 220Hz（低频，仿脚步），顺时针绕圈
-        //   B) 3000Hz（高频，仿枪声），逆时针绕圈、相位错开
-        // 两者会周期性交错，验证空间 + 频段分离。
+        //   A) 220Hz（低频，仿脚步）
+        //   B) 3000Hz（高频，仿枪声）
+        // 7.1 模式：两者反向绕圈（空间+频段分离）。
+        // 立体声模式：两者在左右间来回移动（前向 180°，验证 ILD 法）。
         let handle = thread::spawn(move || {
             let dt_frame = Duration::from_secs_f64(frame_size as f64 / sample_rate as f64);
             let mut t: f64 = 0.0; // 全局时间（秒）
             let two_pi = std::f32::consts::TAU;
             let period_a = orbit_period_s as f64;
             let period_b = (orbit_period_s * 1.6) as f64;
+            let channels = if stereo { 2 } else { 8 };
 
             while running.load(Ordering::SeqCst) {
-                let mut data: Vec<Vec<f32>> = vec![Vec::with_capacity(frame_size); 8];
+                let mut data: Vec<Vec<f32>> = vec![Vec::with_capacity(frame_size); channels];
 
                 for n in 0..frame_size {
                     let time = t + n as f64 / sample_rate as f64;
-                    // A：顺时针扫过 360°
-                    let angle_a = ((time / period_a).fract() as f32) * 360.0 - 180.0;
-                    // B：逆时针、起始相位偏移
-                    let angle_b = 90.0 - ((time / period_b).fract() as f32) * 360.0;
-                    let gains_a = SyntheticCapture::pan_gains(angle_a);
-                    let gains_b = SyntheticCapture::pan_gains(angle_b);
                     let tone_a = (two_pi * 220.0 * time as f32).sin() * 0.5;
                     let tone_b = (two_pi * 3000.0 * time as f32).sin() * 0.45;
-                    for ch in 0..8 {
-                        data[ch].push(tone_a * gains_a[ch] + tone_b * gains_b[ch]);
+
+                    if stereo {
+                        // 三角波在 [-1,1] 间来回的 pan；A、B 反相错开
+                        let pan_a = triangle((time / period_a) as f32);
+                        let pan_b = -triangle((time / period_b) as f32);
+                        let (la, ra) = SyntheticCapture::stereo_pan(pan_a);
+                        let (lb, rb) = SyntheticCapture::stereo_pan(pan_b);
+                        data[0].push(tone_a * la + tone_b * lb);
+                        data[1].push(tone_a * ra + tone_b * rb);
+                    } else {
+                        let angle_a = ((time / period_a).fract() as f32) * 360.0 - 180.0;
+                        let angle_b = 90.0 - ((time / period_b).fract() as f32) * 360.0;
+                        let gains_a = SyntheticCapture::pan_gains(angle_a);
+                        let gains_b = SyntheticCapture::pan_gains(angle_b);
+                        for ch in 0..8 {
+                            data[ch].push(tone_a * gains_a[ch] + tone_b * gains_b[ch]);
+                        }
                     }
                 }
 
                 t += frame_size as f64 / sample_rate as f64;
-                on_frame(AudioFrame::new(8, sample_rate, data));
+                on_frame(AudioFrame::new(channels as u16, sample_rate, data));
 
                 // 近似实时节流（开发用，不追求采样级精确）。
                 thread::sleep(dt_frame);

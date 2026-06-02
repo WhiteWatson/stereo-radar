@@ -35,7 +35,7 @@ export class Radar {
     return [this.cx + r * Math.sin(a), this.cy - r * Math.cos(a)];
   }
 
-  private drawGrid() {
+  private drawGrid(frontOnly: boolean) {
     const { ctx } = this;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -75,6 +75,22 @@ export class Radar {
       const [x, y] = this.polar(deg, this.radius + 10);
       ctx.fillText(label, x, y);
     }
+    // 立体声：后半区置灰 + 标注"前后未知"
+    if (frontOnly) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.cx, this.cy, this.radius, 0, Math.PI); // 下半圆(后方)
+      ctx.closePath();
+      ctx.fillStyle = "rgba(8, 10, 16, 0.62)";
+      ctx.fill();
+      ctx.fillStyle = "#566c8a";
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("后方未知", this.cx, this.cy + this.radius * 0.55);
+      ctx.fillText("(立体声仅辨左右)", this.cx, this.cy + this.radius * 0.55 + 15);
+      ctx.restore();
+    }
+
     // 中心(玩家)
     ctx.fillStyle = "#4a86ff";
     ctx.beginPath();
@@ -137,9 +153,9 @@ export class Radar {
     }
   }
 
-  render(sources: SourcePoint[]) {
+  render(sources: SourcePoint[], frontOnly = false) {
     this.updateTrails(sources);
-    this.drawGrid();
+    this.drawGrid(frontOnly);
     for (const s of sources) this.drawSource(s);
   }
 }
