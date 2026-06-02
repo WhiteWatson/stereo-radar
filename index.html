@@ -52,7 +52,21 @@
       .hint { font-size: 11px; color: #566c8a; text-shadow: 0 1px 2px #000; }
 
       .card { background: rgba(18,22,32,0.92); border: 1px solid #1e2638; border-radius: 8px; padding: 10px 12px; width: 320px; }
+      #device-row { grid-template-columns: 48px 1fr 30px; }
       #device-row select { width: 100%; background: #11151f; color: #cfd6e4; border: 1px solid #1e2638; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+      .icon-btn { cursor: pointer; background: #1c2433; color: #9fb0c8; border: 1px solid #2a3a52; border-radius: 4px; height: 24px; font-size: 13px; line-height: 1; padding: 0; }
+      .icon-btn:hover { background: #2a3f5a; color: #cfe0ff; }
+
+      /* Toast 提示 */
+      #toast-container { position: fixed; left: 0; right: 0; bottom: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 9999; }
+      .toast { pointer-events: auto; max-width: 300px; display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.4; background: rgba(28,34,48,0.97); border: 1px solid #2a3a52; box-shadow: 0 4px 14px rgba(0,0,0,0.45); transition: opacity .18s, transform .18s; }
+      .toast.hide { opacity: 0; transform: translateY(6px); }
+      .toast.error { border-color: #6e2f2f; background: rgba(48,26,28,0.97); }
+      .toast.success { border-color: #2f6e45; }
+      .toast-msg { user-select: text; color: #dbe2ee; word-break: break-word; flex: 1; }
+      .toast-btn { pointer-events: auto; flex: none; cursor: pointer; background: #2a3a52; color: #cfd6e4; border: none; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+      .toast-btn.close { background: transparent; color: #8ea0c0; }
+      .toast-btn:hover { background: #36507a; }
       #panel { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
       .ctl-row { display: grid; grid-template-columns: 48px 1fr 40px; align-items: center; gap: 8px; font-size: 12px; }
       .ctl-row label { color: #8ea0c0; }
@@ -89,7 +103,7 @@
         <div class="ctl-row" id="device-row">
           <label for="device">声源</label>
           <select id="device"></select>
-          <span class="ctl-val" id="device-ch"></span>
+          <button id="device-refresh" class="icon-btn" title="刷新设备列表">↻</button>
         </div>
         <div class="device-status info" id="device-status"></div>
         <details id="setup-guide">

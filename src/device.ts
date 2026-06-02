@@ -1,6 +1,7 @@
-// 声源选择：列出可选设备，切换时调用后端 start_capture，并持久化所选。
+// 声源选择：列出可选设备、可手动刷新、切换时调用后端 start_capture，并持久化。
 import { invoke } from "@tauri-apps/api/core";
 import { getSettings, updateSettings } from "./settings";
+import { showToast } from "./toast";
 
 interface DeviceInfo {
   id: string;
@@ -11,14 +12,17 @@ interface DeviceInfo {
 export class DeviceSelector {
   constructor(
     private select: HTMLSelectElement,
-    private channelsLabel: HTMLElement,
     private statusEl: HTMLElement,
+    refreshBtn: HTMLElement,
   ) {
-    void this.refresh();
+    void this.refresh(true);
     this.select.addEventListener("change", () => void this.onChange());
+    refreshBtn.addEventListener("click", () => void this.refresh(false));
   }
 
-  private async refresh() {
+  /** 重新枚举设备。initial=true 时恢复上次所选并启动采集；手动刷新则保留当前选择、不重启采集。 */
+  private async refresh(initial: boolean) {
+    const keep = initial ? getSettings().deviceId : this.select.value;
     try {
       const devices = await invoke<DeviceInfo[]>("list_devices");
       this.select.innerHTML = "";
@@ -30,27 +34,40 @@ export class DeviceSelector {
         this.select.appendChild(opt);
       }
 
-      // 恢复上次选择的设备（若仍存在），并切换到它。
-      const saved = getSettings().deviceId;
-      if (saved && devices.some((d) => d.id === saved)) {
-        this.select.value = saved;
-        await this.onChange();
+      const found = keep && devices.some((d) => d.id === keep);
+      if (found) {
+        this.select.value = keep!;
+        if (initial) await this.onChange(); // 初次：切到上次设备
       }
-      this.updateChannelLabel();
+      this.renderStatus();
+
+      if (!initial) {
+        showToast(`已刷新：发现 ${devices.length} 个声源`, "success");
+        if (keep && !found) {
+          showToast("上次的设备已不在，请重新选择", "info");
+        }
+      }
     } catch (e) {
-      console.error("list_devices 失败", e);
+      showToast(`获取设备列表失败：${e}`, "error");
     }
   }
 
-  private updateChannelLabel() {
-    const opt = this.select.selectedOptions[0];
-    const ch = opt?.dataset.channels ?? "0";
-    this.channelsLabel.textContent = `${ch}ch`;
-    this.renderStatus(this.select.value, Number(ch));
+  private async onChange() {
+    this.renderStatus();
+    const deviceId = this.select.value;
+    updateSettings({ deviceId });
+    try {
+      await invoke("start_capture", { device_id: deviceId });
+    } catch (e) {
+      showToast(`切换声源失败：${e}`, "error");
+    }
   }
 
-  /** 按声道数提示方位完整度，引导用户配置 7.1。 */
-  private renderStatus(id: string, ch: number) {
+  /** 按声道数提示方位完整度。 */
+  private renderStatus() {
+    const opt = this.select.selectedOptions[0];
+    const ch = Number(opt?.dataset.channels ?? 0);
+    const id = this.select.value;
     let text: string;
     let cls: "ok" | "warn" | "info";
     if (id === "synthetic-orbit") {
@@ -63,25 +80,13 @@ export class DeviceSelector {
       text = `✓ ${ch}ch 多声道：方位基本完整`;
       cls = "ok";
     } else if (ch === 2) {
-      text = "⚠ 立体声：只有左右方位。要完整 360°，请把游戏路由到 7.1 虚拟声卡 ↓";
-      cls = "warn";
+      text = "立体声：可判左右，前后不可靠（受限于 2 声道）";
+      cls = "info";
     } else {
-      text = `⚠ ${ch}ch：方位信息不足，建议改用 7.1 虚拟声卡 ↓`;
+      text = `⚠ ${ch}ch：方位信息不足`;
       cls = "warn";
     }
     this.statusEl.textContent = text;
     this.statusEl.className = `device-status ${cls}`;
-  }
-
-  private async onChange() {
-    this.updateChannelLabel();
-    const deviceId = this.select.value;
-    updateSettings({ deviceId });
-    try {
-      await invoke("start_capture", { device_id: deviceId });
-    } catch (e) {
-      console.error("start_capture 失败", e);
-      alert(`切换声源失败：${e}`);
-    }
   }
 }
