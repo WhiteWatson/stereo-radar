@@ -41,6 +41,9 @@ pub struct AnalyzerParams {
     pub min_separation_deg: f32,
     /// 次峰相对最强峰的最小高度比，低于则忽略（抑制噪声小峰）。
     pub peak_ratio: f32,
+    /// 峰值保持的衰减时间常数（毫秒）。声音停止后光点按 exp(-dt/release_ms) 淡出。
+    /// 起音(attack)始终瞬时，无延迟；仅释放(release)用此值，让脚步等瞬态多停留可见。
+    pub release_ms: f32,
 }
 
 impl Default for AnalyzerParams {
@@ -52,6 +55,7 @@ impl Default for AnalyzerParams {
             max_sources: 4,
             min_separation_deg: 22.0,
             peak_ratio: 0.22,
+            release_ms: 180.0,
         }
     }
 }
@@ -64,6 +68,7 @@ pub struct Analyzer {
     window: Vec<f32>, // Hann 窗，长度随帧长缓存
     tracked: Vec<SourcePoint>,
     next_id: u32,
+    last_ts: Option<u64>, // 上一帧时间戳(ms)，用于计算释放衰减
 }
 
 impl Analyzer {
@@ -75,6 +80,7 @@ impl Analyzer {
             window: Vec::new(),
             tracked: Vec::new(),
             next_id: 0,
+            last_ts: None,
         }
     }
 
@@ -141,8 +147,8 @@ impl Analyzer {
             self.detect_surround(&spectra, n, frame.sample_rate)
         };
 
-        // 跨帧跟踪 + 平滑，赋稳定 id。
-        let sources = self.track(detected);
+        // 跨帧跟踪 + 快起慢落包络，赋稳定 id。
+        let sources = self.track(detected, ts);
         self.tracked = sources.clone();
 
         FramePayload { ts, sources, channel_energies: energies }
@@ -345,13 +351,24 @@ impl Analyzer {
             .collect()
     }
 
-    /// 最近邻把本帧峰关联到上一帧音源，继承 id 并 EMA 平滑；未匹配的给新 id。
-    fn track(&mut self, detected: Vec<SourcePoint>) -> Vec<SourcePoint> {
+    /// 跨帧跟踪 + **快起慢落包络**（低延迟实时）：
+    /// - 起音瞬时：声源出现/变强时角度直接吸附检测值、强度拉满，**零平滑延迟**。
+    /// - 释放缓慢：声音停止后，旧源按 `exp(-dt/release_ms)` 衰减并继续保留，
+    ///   直到低于 gate 才消失 —— 让脚步等短瞬态"多停留一会儿"看得清。
+    /// - 衰减期角度走轻 EMA 保持稳定。释放用帧间 dt，与采集节奏无关。
+    fn track(&mut self, detected: Vec<SourcePoint>, ts: u64) -> Vec<SourcePoint> {
         let a = self.params.smoothing.clamp(0.0, 0.95);
         let assoc_thresh = (self.params.min_separation_deg * 1.5).max(20.0);
 
+        let dt = match self.last_ts {
+            Some(prev) => ts.saturating_sub(prev) as f32,
+            None => 0.0,
+        };
+        self.last_ts = Some(ts);
+        let release = (-dt / self.params.release_ms.max(1.0)).exp();
+
         let mut prev = self.tracked.clone();
-        let mut out = Vec::with_capacity(detected.len());
+        let mut out = Vec::new();
 
         for mut s in detected {
             // 找最近的上一帧音源。
@@ -366,8 +383,13 @@ impl Analyzer {
                 Some((i, _)) => {
                     let p = prev.remove(i);
                     s.id = p.id;
-                    s.angle = ema_angle(p.angle, s.angle, a);
-                    s.intensity = a * p.intensity + (1.0 - a) * s.intensity;
+                    let held = p.intensity * release;
+                    if s.intensity < held {
+                        // 衰减期：保持峰值衰减 + 角度轻 EMA 稳定。
+                        s.intensity = held;
+                        s.angle = ema_angle(p.angle, s.angle, a);
+                    }
+                    // else 上升沿：保留检测到的角度与强度（瞬时吸附，零延迟）。
                 }
                 None => {
                     s.id = self.next_id;
@@ -376,6 +398,18 @@ impl Analyzer {
             }
             out.push(s);
         }
+
+        // 本帧未检出的旧源：继续衰减并保留，直到低于 gate（瞬态余晖）。
+        for p in prev {
+            let decayed = p.intensity * release;
+            if decayed >= self.params.gate {
+                out.push(SourcePoint { intensity: decayed, ..p });
+            }
+        }
+
+        // 按强度取前 max_sources 个。
+        out.sort_by(|x, y| y.intensity.partial_cmp(&x.intensity).unwrap());
+        out.truncate(self.params.max_sources);
         out
     }
 }
@@ -512,5 +546,27 @@ mod tests {
         angles.sort_by(|x, y| x.partial_cmp(y).unwrap());
         assert!(angles[0] < -20.0, "左源应在负角, got {}", angles[0]);
         assert!(angles[1] > 20.0, "右源应在正角, got {}", angles[1]);
+    }
+
+    #[test]
+    fn transient_lingers_then_fades() {
+        let sr = 48_000;
+        let mut a = Analyzer::new(AnalyzerParams { smoothing: 0.0, release_ms: 180.0, ..Default::default() });
+        // 帧1：有声源（瞬态）
+        let p1 = a.process(&stereo_tone(2048, sr, 700.0, 0.3, 0.5), 0);
+        assert_eq!(p1.sources.len(), 1, "应检出瞬态");
+        let id = p1.sources[0].id;
+        let i1 = p1.sources[0].intensity;
+
+        // 帧2：20ms 后静音 → 应仍有"余晖"且 id 不变、强度衰减
+        let silent = AudioFrame::new(2, sr, vec![vec![0.0f32; 2048], vec![0.0f32; 2048]]);
+        let p2 = a.process(&silent, 20);
+        assert_eq!(p2.sources.len(), 1, "停止后应仍有余晖");
+        assert_eq!(p2.sources[0].id, id, "余晖应保持同一 id");
+        assert!(p2.sources[0].intensity < i1, "余晖强度应衰减");
+
+        // 帧3：2 秒后 → 早已淡出
+        let p3 = a.process(&silent, 2000);
+        assert!(p3.sources.is_empty(), "足够久后应消失");
     }
 }
